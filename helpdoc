@@ -1,0 +1,163 @@
+#!/usr/bin/env bash
+
+#################################################################
+    #   help:begin  
+
+#helpdoc
+#=======
+# A KISS CLI tool for managing GNU style help messages.
+# Extracts help messages from comments in source and prints them when asked.
+
+#Repository: https://github.com/SomajitDey/helpdoc
+
+#License / Authors / Bug Reports: See repository
+
+#Version: 0.0.0
+
+#Usage:
+# helpdoc [options] <command> 
+
+#Options:
+# -e <source> : Extract help message for <command> form <source> file. If <command> is absent, derives command from <source> basename by removing extension
+# -d : Delete help-file for <command> from database
+# -a : Show only ABOUT message from <command>
+# -u : Show only USAGE message from <command>
+# -v : Show VERSION information from the ABOUT message, if any. If <command> is absent, shows self version.
+# -h : Help for helpdoc
+
+#Example:
+
+# Assume you have written an application `hello_world` with source @ examples/hello_world.c
+# - Help messages must be written in hello_world.c as single-line comments only.
+# - The entire message block must be put between '//help:begin' and '//help:end' phrases (case-insensitive).
+# - USAGE message must start with '//Usage:' header (case-insensitive).
+# - What comes before that header is considered the ABOUT message. It may contain repository URL, authors, license, version etc.
+# - Version information, if any, must start with '//Version: ' prefix and must come before the USAGE message.
+
+# Update the helpdoc database with hello_world's help message:
+#  helpdoc -e examples/hello_world.c hello_world
+
+# To show help message now:
+#  helpdoc hello_world
+
+# To show only usage info:
+#  helpdoc -u hello_world
+
+# help:end
+#################################################################
+
+# helpfile installation paths: local and system wide
+local_ipath="${HOME}/.helpdoc"; mkdir -p "${local_ipath}" 2>/dev/null
+sys_ipath='/etc/helpdoc'; mkdir -p "${sys_ipath}" 2>/dev/null
+
+# help message header footer phrase (case insensitive)
+help_begin='HELP:BEGIN'
+help_end='HELP:END'
+usage_begin='USAGE:'
+
+set -o pipefail
+
+extract_comment_marker(){
+  # Extract comment marker from sourcefile provided as arg.
+  local source="${1}"
+  local help_header="$(grep -m1 -i "${help_begin}[[:blank:]]*$" "${source}" | sed "s/${help_begin}/\U&/i")"
+  # sed above makes the case insensitive "${help_begin}" all caps
+  echo "${help_header%%${help_begin}*}" | xargs # xargs to clear leading and trailing space/tabs
+}
+
+extract_comment_remove_comment_marker(){
+  # Extract comment and remove comment marker from sourcefile provided as arg.
+  local source="${1}" comment_marker="${2}"
+  grep "^[[:blank:]]*${comment_marker}" "${source}" | \
+    sed 's/^[[:blank:]]*//' | cut -c "$((${#comment_marker}+1))-" # sed clears leading space/tabs
+}
+
+extract_between_patterns(){
+  # Extracts lines between given (case-insensitive) patterns (inclusive) from stdin.
+  local pat1="${1}" pat2="${2}"
+  sed -n "/^[[:blank:]]*${pat1}[[:blank:]]*$/I,/^[[:blank:]]*${pat2}[[:blank:]]*$/Ip"
+}
+
+check_syntax(){
+  #Check help message syntax in sourcefile provided as arg.
+  local source="${1}" comment_marker="${2}"
+  [[ -n "${comment_marker}" ]] && \
+  grep -m1 -i -q "^[[:blank:]]*${comment_marker}[[:blank:]]*${help_end}[[:blank:]]*$" "${source}" && \
+  grep -m1 -i -q "^[[:blank:]]*${comment_marker}[[:blank:]]*${usage_begin}[[:blank:]]*$" "${source}" || \
+    { echo "Problem with help message format"; exit 1;}
+} >&2
+
+extract_help(){
+  # Extract help message from sourcefile provided as arg.
+  local source="${1}"
+  local comment_marker="$(extract_comment_marker "${source}")"
+
+  check_syntax "${source}" "${comment_marker}"
+
+  extract_comment_remove_comment_marker "${source}" "${comment_marker}" | \
+    extract_between_patterns "${help_begin}" "${help_end}"
+}
+
+mode=help
+while getopts :e:dauvh opt; do
+  case "${opt}" in
+    e) source="${OPTARG}"
+       [[ -f "${source}" ]] || { echo "Couldn't open ${source} for reading"; exit 1;}
+       mode=extract ;;
+    d) mode=delete ;;
+    a) mode=about ;;
+    u) mode=usage ;;
+    v) mode=version ;;
+    h) helpdoc helpdoc; exit ;;
+    *) echo 'Provided option not supported. See usage: helpdoc -h.' >&2; exit 1 ;;
+  esac
+done
+
+command="${!OPTIND}"
+[[ -n "${command}" ]] || [[ "${mode}" == extract ]] || [[ "${mode}" == version ]] || \
+  { echo 'Pass a command name as argument. See usage: helpdoc -h.' >&2; exit 1;}
+
+extract(){
+  # Extracts help message from given source and creates helpfile
+  # Helpfile is installed in local path if system path is denied
+  # If no command is explicitly provided, derive command from source file basename by removing the extension(s)
+  [[ -n "${command}" ]] || command="$(echo ${source##*/} | cut -d '.' -f1)"
+  touch "${sys_ipath}/${command}" 2>/dev/null && extract_help "${source}" > "${sys_ipath}/${command}" || \
+    extract_help "${source}" > "${local_ipath}/${command}" && \
+    echo "Installed helpfile for command: ${command}"
+}
+
+delete(){
+  # Deletes helpfile. Tries deletion from local path if system path is denied
+  rm --interactive=never "${sys_ipath}/${command}" || rm -f "${local_ipath}/${command}"
+} 2>/dev/null
+
+show_help(){
+  # Show help file content. Gives precedence to locally installed helpfile.
+  cat "${local_ipath}/${command}" || cat "${sys_ipath}/${command}"
+} 2>/dev/null
+
+about(){
+  # Shows about message only
+   show_help | extract_between_patterns "${help_begin}" "${usage_begin}" | \
+    head -n -1 | tail -n +2 # Getting rid of the header and footer
+} 2>/dev/null
+
+usage(){
+  # Shows usage message only. If no help file is found tries `command -h|--help` directly.
+    show_help | extract_between_patterns "${usage_begin}" "${help_end}" | head -n -1 || \
+    ("${command}" -h || "${command}" --help)
+} 2>/dev/null
+
+help(){
+  # Shows both about and usage messages
+  about && echo ; usage
+}
+
+version(){
+  # Show version information
+  [[ -n "${command}" ]] || command='helpdoc'
+  about | grep -i '^[[:blank:]]*Version:' | cut -d ':' -f 2-
+}
+
+$mode
