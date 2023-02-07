@@ -31,15 +31,15 @@ The end-user only needs to install `helpdoc` once as a common dependency.
 
 Extraction of help text from the comment lines in the source code requires parsing according to some well-defined syntax. `helpdoc` recognizes the following syntax.
 
-- Help messages must be written in as single-line comments only. For discussion's sake assume the single-line comment marker is `//` as in the C language.
+- Help messages must be written in as single-line comments only. For discussion's sake, assume the single-line comment marker is `//` (as in the C language).
 
-- The entire message block must be put between `//help:begin` and `//help:end` phrases (case-insensitive). Spaces/tabs are allowed before and after these phrases. Spaces/tabs may also separate the comment marker `//` and `help:begin` or `help:end`.
+- The entire message block must be put between the header, `//help:begin` and the footer, `//help:end`, both case-insensitive. Spaces/tabs are allowed before and after these phrases. Spaces/tabs may also separate the comment marker `//` and `help:begin` or `help:end`.
 
-- *Usage* message must start with `//Usage:` header (case-insensitive). Spaces/tabs are allowed as above.
+- *Usage* message must start with the case-insensitive prefix, `//Usage:`. Spaces/tabs are allowed as above.
 
-- Whatever comes before the `//Usage:` header is considered the *About* message. It may contain repository URL, author information, license, version etc.
+- Whatever comes before the *Usage* message (i.e. before the `//Usage:` prefix) is considered the *About* message. It may contain repository URL, author information, license, version etc.
  
-- Version information, if any, must start with the `//Version: ` prefix and must come before the *Usage* message.
+- Version information, if any, must start with the case-insensitive `//Version: ` prefix and must come before the *Usage* message.
 
 See [examples](examples/) for illustration.
 

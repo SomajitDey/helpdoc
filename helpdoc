@@ -1,48 +1,33 @@
 #!/usr/bin/env bash
 
 #################################################################
-    #   help:begin  
-
-#helpdoc
-#=======
+# help:begin  
+#
+# helpdoc
+# =======
 # A KISS CLI tool for managing GNU style help messages.
-# Extracts help messages from comments in source and prints them when asked.
-
-#Repository: https://github.com/SomajitDey/helpdoc
-
-#License / Authors / Bug Reports: See repository
-
-#Version: 0.0.1
-
-#Usage:
-# helpdoc [options] <command> 
-
-#Options:
+# Extracts and stores help messages from comments in sourcecode and prints them when asked.
+#
+# Repository: https://github.com/SomajitDey/helpdoc
+#
+# License / Authors / Bug Reports: See repository
+#
+# Version: 0.1.0
+#
+# Usage: helpdoc [options] <command>
+#
+# Options:
 # -e <source> : Extract help message for <command> form <source> file. If <command> is absent, derives command from <source> basename by removing extension
 # -d : Delete help-file for <command> from database
 # -a : Show only ABOUT message from <command>
 # -u : Show only USAGE message from <command>
 # -v : Show VERSION information from the ABOUT message, if any. If <command> is absent, shows self version.
 # -h : Help for helpdoc
-
-#Example:
-
-# Assume you have written an application `hello_world` with source @ examples/hello_world.c
-# - Help messages must be written in hello_world.c as single-line comments only.
-# - The entire message block must be put between '//help:begin' and '//help:end' phrases (case-insensitive).
-# - USAGE message must start with '//Usage:' header (case-insensitive).
-# - What comes before that header is considered the ABOUT message. It may contain repository URL, authors, license, version etc.
-# - Version information, if any, must start with '//Version: ' prefix and must come before the USAGE message.
-
-# Update the helpdoc database with hello_world's help message:
-#  helpdoc -e examples/hello_world.c hello_world
-
-# To show help message now:
-#  helpdoc hello_world
-
-# To show only usage info:
-#  helpdoc -u hello_world
-
+#
+# Help Message Documentation Syntax: https://github.com/somajitdey/helpdoc#syntax
+#
+# Examples: https://github.com/somajitdey/helpdoc#examples
+#
 # help:end
 #################################################################
 
@@ -50,19 +35,18 @@
 local_ipath="${HOME}/.helpdoc"; mkdir -p "${local_ipath}" 2>/dev/null
 sys_ipath='/etc/helpdoc'; mkdir -p "${sys_ipath}" 2>/dev/null
 
-# help message header footer phrase (case insensitive)
-help_begin='HELP:BEGIN'
-help_end='HELP:END'
-usage_begin='USAGE:'
+# help message header/footer/prefix (case insensitive)
+help_begin='HELP:BEGIN[[:blank:]]*$' # Header with possibly trailing spaces/tabs
+help_end='HELP:END[[:blank:]]*$' # Footer with possibly trailing spaces/tabs
+usage_begin='USAGE:' # Prefix possibly followed by non-blank characters
 
 set -o pipefail
 
 extract_comment_marker(){
   # Extract comment marker from sourcefile provided as arg.
   local source="${1}"
-  local help_header="$(grep -m1 -i "${help_begin}[[:blank:]]*$" "${source}" | sed "s/${help_begin}/\U&/i")"
-  # sed above makes the case insensitive "${help_begin}" all caps
-  echo "${help_header%%${help_begin}*}" | xargs # xargs to clear leading and trailing space/tabs
+  grep -m1 -i "${help_begin}" "${source}" | sed "s/${help_begin}//i" | xargs
+  # xargs to clear leading and trailing space/tabs
 }
 
 extract_comment_remove_comment_marker(){
@@ -73,18 +57,18 @@ extract_comment_remove_comment_marker(){
 }
 
 extract_between_patterns(){
-  # Extracts lines between given (case-insensitive) patterns (inclusive) from stdin.
+  # Extracts lines between given (case-insensitive) patterns (inclusive) from stdin. Allows leading spaces/tabs
   local pat1="${1}" pat2="${2}"
-  sed -n "/^[[:blank:]]*${pat1}[[:blank:]]*$/I,/^[[:blank:]]*${pat2}[[:blank:]]*$/Ip"
+  sed -n "/^[[:blank:]]*${pat1}/I,/^[[:blank:]]*${pat2}/Ip"
 }
 
 check_syntax(){
   #Check help message syntax in sourcefile provided as arg.
   local source="${1}" comment_marker="${2}"
   [[ -n "${comment_marker}" ]] && \
-  grep -m1 -i -q "^[[:blank:]]*${comment_marker}[[:blank:]]*${help_end}[[:blank:]]*$" "${source}" && \
-  grep -m1 -i -q "^[[:blank:]]*${comment_marker}[[:blank:]]*${usage_begin}[[:blank:]]*$" "${source}" || \
-    { echo "Problem with help message format"; exit 1;}
+  grep -m1 -i -q "^[[:blank:]]*${comment_marker}[[:blank:]]*${help_end}" "${source}" && \
+  grep -m1 -i -q "^[[:blank:]]*${comment_marker}[[:blank:]]*${usage_begin}" "${source}" || \
+    { echo "Problem with help message format in ${source}"; exit 1;}
 } >&2
 
 extract_help(){
