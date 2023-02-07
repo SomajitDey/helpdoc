@@ -12,7 +12,7 @@
 
 #License / Authors / Bug Reports: See repository
 
-#Version: 0.0.0
+#Version: 0.0.1
 
 #Usage:
 # helpdoc [options] <command> 
@@ -122,9 +122,11 @@ extract(){
   # Helpfile is installed in local path if system path is denied
   # If no command is explicitly provided, derive command from source file basename by removing the extension(s)
   [[ -n "${command}" ]] || command="$(echo ${source##*/} | cut -d '.' -f1)"
-  touch "${sys_ipath}/${command}" 2>/dev/null && extract_help "${source}" > "${sys_ipath}/${command}" || \
-    extract_help "${source}" > "${local_ipath}/${command}" && \
-    echo "Installed helpfile for command: ${command}"
+  local tmpfile="$(mktemp)"; trap "rm -f ${tmpfile}" EXIT
+  extract_help "${source}" > "${tmpfile}" || exit 1
+  (mv -f "${tmpfile}" "${sys_ipath}/${command}" && chmod a+r "${sys_ipath}/${command}" \
+    || mv -f "${tmpfile}" "${local_ipath}/${command}") 2>/dev/null \
+      && echo "Installed helpfile for command: ${command}"
 }
 
 delete(){
